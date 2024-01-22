@@ -21,7 +21,7 @@
 #define NOMENUS
 #define NOMETAFILE
 #define NOMINMAX
-//#define NOMSG
+// #define NOMSG
 #define NONLS
 #define NOOPENFILE
 #define NOPROFILER
@@ -33,7 +33,7 @@
 #define NOSYSCOMMANDS
 #define NOSYSMETRICS
 #define NOTEXTMETRIC
-//#define NOUSER
+// #define NOUSER
 #define NOVIRTUALKEYCODES
 #define NOWH
 #define NOWINMESSAGES
@@ -65,6 +65,7 @@ static uint8_t fragmentConstants[1024 * 4];
 static uint8_t geometryConstants[1024 * 4];
 static uint8_t tessControlConstants[1024 * 4];
 static uint8_t tessEvalConstants[1024 * 4];
+static uint8_t computeConstants[1024 * 4];
 
 static D3D11_COMPARISON_FUNC get_comparison(kinc_g4_compare_mode_t compare) {
 	switch (compare) {
@@ -98,6 +99,7 @@ static size_t get_multiple_of_16(size_t value) {
 
 #include "Direct3D11.c.h"
 #include "ShaderHash.c.h"
+#include "compute.c.h"
 #include "constantbuffer.c.h"
 #include "indexbuffer.c.h"
 #include "pipeline.c.h"

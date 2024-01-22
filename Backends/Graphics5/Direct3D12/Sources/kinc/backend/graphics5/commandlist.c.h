@@ -1,4 +1,5 @@
 #include <kinc/graphics5/commandlist.h>
+#include <kinc/graphics5/compute.h>
 #include <kinc/graphics5/constantbuffer.h>
 #include <kinc/graphics5/indexbuffer.h>
 #include <kinc/graphics5/pipeline.h>
@@ -53,6 +54,8 @@ void kinc_g5_internal_reset_textures(struct kinc_g5_command_list *list);
 
 void kinc_g5_command_list_begin(struct kinc_g5_command_list *list) {
 	assert(!list->impl.open);
+
+	compute_pipeline_set = false;
 
 	if (list->impl.fence_value > 0) {
 		waitForFence(list->impl.fence, list->impl.fence_value, list->impl.fence_event);
@@ -184,6 +187,18 @@ void kinc_g5_command_list_set_fragment_constant_buffer(struct kinc_g5_command_li
 #endif
 }
 
+void kinc_g5_command_list_set_compute_constant_buffer(struct kinc_g5_command_list *list, kinc_g5_constant_buffer_t *buffer, int offset, size_t size) {
+	assert(list->impl.open);
+
+#ifdef KORE_DXC
+	if (list->impl._currentPipeline->impl.fragmentConstantsSize > 0) {
+		list->impl._commandList->SetGraphicsRootConstantBufferView(3, buffer->impl.constant_buffer->GetGPUVirtualAddress() + offset);
+	}
+#else
+	list->impl._commandList->SetComputeRootConstantBufferView(3, buffer->impl.constant_buffer->GetGPUVirtualAddress() + offset);
+#endif
+}
+
 void kinc_g5_command_list_draw_indexed_vertices(struct kinc_g5_command_list *list) {
 	kinc_g5_command_list_draw_indexed_vertices_from_to(list, 0, list->impl._indexCount);
 }
@@ -297,6 +312,8 @@ void kinc_g5_command_list_set_pipeline(struct kinc_g5_command_list *list, kinc_g
 
 	list->impl._currentPipeline = pipeline;
 	list->impl._commandList->SetPipelineState(pipeline->impl.pso);
+	compute_pipeline_set = false;
+
 	for (int i = 0; i < KINC_INTERNAL_G5_TEXTURE_COUNT; ++i) {
 		list->impl.currentRenderTargets[i] = NULL;
 		list->impl.currentTextures[i] = NULL;
@@ -507,6 +524,19 @@ void kinc_g5_command_list_get_render_target_pixels(kinc_g5_command_list_t *list,
 	render_target->impl.renderTargetReadback->Unmap(0, NULL);
 }
 
+void kinc_g5_internal_set_compute_constants(kinc_g5_command_list_t *commandList);
+
+void kinc_g5_command_list_set_compute_shader(kinc_g5_command_list_t *list, kinc_g5_compute_shader *shader) {
+	list->impl._commandList->SetPipelineState(shader->impl.pso);
+	compute_pipeline_set = true;
+
+	for (int i = 0; i < KINC_INTERNAL_G5_TEXTURE_COUNT; ++i) {
+		list->impl.currentRenderTargets[i] = NULL;
+		list->impl.currentTextures[i] = NULL;
+	}
+	kinc_g5_internal_set_compute_constants(list);
+}
+
 void kinc_g5_command_list_compute(kinc_g5_command_list_t *list, int x, int y, int z) {
 	assert(list->impl.open);
 	list->impl._commandList->Dispatch(x, y, z);
@@ -520,6 +550,9 @@ void kinc_g5_command_list_set_texture(kinc_g5_command_list_t *list, kinc_g5_text
 	}
 	else if (unit.stages[KINC_G5_SHADER_TYPE_VERTEX] >= 0) {
 		kinc_g5_internal_texture_set(list, texture, unit.stages[KINC_G5_SHADER_TYPE_VERTEX]);
+	}
+	else if (unit.stages[KINC_G5_SHADER_TYPE_COMPUTE] >= 0) {
+		kinc_g5_internal_texture_set(list, texture, unit.stages[KINC_G5_SHADER_TYPE_COMPUTE]);
 	}
 	kinc_g5_internal_set_textures(list);
 }
@@ -540,7 +573,18 @@ bool kinc_g5_command_list_init_occlusion_query(kinc_g5_command_list_t *list, uns
 	return false;
 }
 
-void kinc_g5_command_list_set_image_texture(kinc_g5_command_list_t *list, kinc_g5_texture_unit_t unit, kinc_g5_texture_t *texture) {}
+void kinc_g5_command_list_set_image_texture(kinc_g5_command_list_t *list, kinc_g5_texture_unit_t unit, kinc_g5_texture_t *texture) {
+	if (unit.stages[KINC_G5_SHADER_TYPE_FRAGMENT] >= 0) {
+		kinc_g5_internal_texture_set(list, texture, unit.stages[KINC_G5_SHADER_TYPE_FRAGMENT]);
+	}
+	else if (unit.stages[KINC_G5_SHADER_TYPE_VERTEX] >= 0) {
+		kinc_g5_internal_texture_set(list, texture, unit.stages[KINC_G5_SHADER_TYPE_VERTEX]);
+	}
+	else if (unit.stages[KINC_G5_SHADER_TYPE_COMPUTE] >= 0) {
+		kinc_g5_internal_texture_set(list, texture, unit.stages[KINC_G5_SHADER_TYPE_COMPUTE]);
+	}
+	kinc_g5_internal_set_textures(list);
+}
 
 void kinc_g5_command_list_delete_occlusion_query(kinc_g5_command_list_t *list, unsigned occlusionQuery) {}
 

@@ -54,6 +54,8 @@ static EnableNonClientDpiScalingType MyEnableNonClientDpiScaling = NULL;
 
 #define MAX_TOUCH_POINTS 10
 
+#define KINC_DINPUT_MAX_COUNT 8
+
 struct touchpoint {
 	int sysID;
 	int x;
@@ -737,10 +739,10 @@ void loadXInput() {
 }
 
 static IDirectInput8 *di_instance = NULL;
-static IDirectInputDevice8 *di_pads[XUSER_MAX_COUNT];
-static DIJOYSTATE2 di_padState[XUSER_MAX_COUNT];
-static DIJOYSTATE2 di_lastPadState[XUSER_MAX_COUNT];
-static DIDEVCAPS di_deviceCaps[XUSER_MAX_COUNT];
+static IDirectInputDevice8 *di_pads[KINC_DINPUT_MAX_COUNT];
+static DIJOYSTATE2 di_padState[KINC_DINPUT_MAX_COUNT];
+static DIJOYSTATE2 di_lastPadState[KINC_DINPUT_MAX_COUNT];
+static DIDEVCAPS di_deviceCaps[KINC_DINPUT_MAX_COUNT];
 static int padCount = 0;
 
 static void cleanupPad(int padIndex) {
@@ -874,7 +876,7 @@ LCleanup:
 
 // TODO (DK) this should probably be called from somewhere?
 static void cleanupDirectInput() {
-	for (int padIndex = 0; padIndex < XUSER_MAX_COUNT; ++padIndex) {
+	for (int padIndex = 0; padIndex < KINC_DINPUT_MAX_COUNT; ++padIndex) {
 		cleanupPad(padIndex);
 	}
 
@@ -910,8 +912,10 @@ static BOOL CALLBACK enumerateJoystickAxesCallback(LPCDIDEVICEOBJECTINSTANCEW dd
 }
 
 static BOOL CALLBACK enumerateJoysticksCallback(LPCDIDEVICEINSTANCEW ddi, LPVOID context) {
-	if (IsXInputDevice(&ddi->guidProduct))
+	if (padCount < XUSER_MAX_COUNT && IsXInputDevice(&ddi->guidProduct)) {
+		++padCount;
 		return DIENUM_CONTINUE;
+	}
 
 	HRESULT hr = di_instance->lpVtbl->CreateDevice(di_instance, &ddi->guidInstance, &di_pads[padCount], NULL);
 
@@ -965,7 +969,7 @@ static BOOL CALLBACK enumerateJoysticksCallback(LPCDIDEVICEINSTANCEW ddi, LPVOID
 
 		++padCount;
 
-		if (padCount >= XUSER_MAX_COUNT) {
+		if (padCount >= KINC_DINPUT_MAX_COUNT) {
 			return DIENUM_STOP;
 		}
 	}
@@ -976,10 +980,10 @@ static BOOL CALLBACK enumerateJoysticksCallback(LPCDIDEVICEINSTANCEW ddi, LPVOID
 static void initializeDirectInput() {
 	HINSTANCE hinstance = GetModuleHandle(NULL);
 
-	memset(&di_pads, 0, sizeof(IDirectInputDevice8) * XUSER_MAX_COUNT);
-	memset(&di_padState, 0, sizeof(DIJOYSTATE2) * XUSER_MAX_COUNT);
-	memset(&di_lastPadState, 0, sizeof(DIJOYSTATE2) * XUSER_MAX_COUNT);
-	memset(&di_deviceCaps, 0, sizeof(DIDEVCAPS) * XUSER_MAX_COUNT);
+	memset(&di_pads, 0, sizeof(IDirectInputDevice8) * KINC_DINPUT_MAX_COUNT);
+	memset(&di_padState, 0, sizeof(DIJOYSTATE2) * KINC_DINPUT_MAX_COUNT);
+	memset(&di_lastPadState, 0, sizeof(DIJOYSTATE2) * KINC_DINPUT_MAX_COUNT);
+	memset(&di_deviceCaps, 0, sizeof(DIDEVCAPS) * KINC_DINPUT_MAX_COUNT);
 
 	HRESULT hr = DirectInput8Create(hinstance, DIRECTINPUT_VERSION, &IID_IDirectInput8, (void **)&di_instance, NULL);
 
@@ -1082,6 +1086,11 @@ bool handleDirectInputPad(int padIndex) {
 }
 
 static bool isXInputGamepad(int gamepad) {
+	//if gamepad is greater than XInput max, treat it as DINPUT.
+	if (gamepad >= XUSER_MAX_COUNT)
+	{
+		return false;
+	}
 	XINPUT_STATE state;
 	memset(&state, 0, sizeof(XINPUT_STATE));
 	DWORD dwResult = InputGetState(gamepad, &state);
@@ -1124,7 +1133,7 @@ bool kinc_internal_handle_messages() {
 
 	if (InputGetState != NULL && (detectGamepad || gamepadFound)) {
 		detectGamepad = false;
-		for (DWORD i = 0; i < XUSER_MAX_COUNT; ++i) {
+		for (DWORD i = 0; i < KINC_DINPUT_MAX_COUNT; ++i) {
 			XINPUT_STATE state;
 			memset(&state, 0, sizeof(XINPUT_STATE));
 			DWORD dwResult = InputGetState(i, &state);
@@ -1170,9 +1179,9 @@ bool kinc_internal_handle_messages() {
 				}
 			}
 			else {
-				if (handleDirectInputPad(i)) {
-					gamepadFound = true;
-				}
+					if (handleDirectInputPad(i)) {
+						gamepadFound = true;
+					}
 			}
 		}
 	}
