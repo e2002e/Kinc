@@ -69,7 +69,7 @@ static void setTextureAddressingInternal(GLenum target, kinc_compute_texture_uni
 	default:
 		glTexParameteri(target, texDir, GL_REPEAT);
 		break;
-	}f
+	}
 	glCheckErrors();
 }
 
